@@ -8,7 +8,8 @@ namespace TEXT_TO_IMAGE;
 class Program
 {
     private const string DEFAULT_FONT_PATH = "/System/Library/Fonts/STHeiti Medium.ttc";
-    private const string ZEBRA_IP = "192.168.1.45";
+    // private const string ZEBRA_IP = "192.168.1.45";
+    private const string ZEBRA_IP = "192.168.0.243";
     private const int ZEBRA_PORT = 9100;
 
     static void Main()
@@ -24,15 +25,17 @@ class Program
 
 
 
-            outputPath = "/Users/maenqi/Projects/TEXT_TO_IMAGE/TEXT_TO_IMAGE/bin/Debug/net6.0/label_capture_bw.png";
+            outputPath = "/Users/maenqi/Projects/TEXT_TO_IMAGE/TEXT_TO_IMAGE/bin/Debug/net6.0/label_text_mac.png";
 
             // 2. 讀取圖片並準備打印
             using var scaledBitmap = LoadAndScaleImage(outputPath, 2.0);
             
+            using var btm = ResizeProportionally(scaledBitmap, 1200, 800);
+
             // 裁剪圖片到固定大小 (例如 600x400 像素)，居中裁剪
-            int targetWidth = 300;
-            int targetHeight = 200;
-            using var bitmap = CropImageToSize(scaledBitmap, targetWidth, targetHeight, true);
+            int targetWidth = 1200;
+            int targetHeight = 800;
+            using var bitmap = CropImageToSize(btm, targetWidth, targetHeight, true);
             
             // 3. 轉換為二進位碼
             string binaryData = ConvertImageToZplHex(bitmap);
@@ -47,6 +50,40 @@ class Program
         {
             Console.WriteLine($"❌ 處理過程發生錯誤: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 依照比例縮放圖片至指定的最大寬度和高度
+    /// </summary>
+    /// <param name="bitmap">原始圖片</param>
+    /// <param name="maxWidth">最大寬度</param>
+    /// <param name="maxHeight">最大高度</param>
+    /// <returns>縮放後的圖片</returns>
+    private static SKBitmap ResizeProportionally(SKBitmap bitmap, int maxWidth, int maxHeight)
+    {
+        Console.WriteLine($"依照比例縮放圖片: 原始大小 {bitmap.Width}x{bitmap.Height} => 最大尺寸 {maxWidth}x{maxHeight}");
+        
+        // 計算縮放比例
+        float widthRatio = (float)maxWidth / bitmap.Width;
+        float heightRatio = (float)maxHeight / bitmap.Height;
+        float ratio = Math.Min(widthRatio, heightRatio);
+        
+        // 計算縮放後的尺寸
+        int newWidth = (int)(bitmap.Width * ratio);
+        int newHeight = (int)(bitmap.Height * ratio);
+        
+        Console.WriteLine($"縮放後大小: {newWidth}x{newHeight} (比例: {ratio:F2})");
+        
+        // 建立縮放後的圖片
+        var scaledBitmap = new SKBitmap(newWidth, newHeight);
+        using (var canvas = new SKCanvas(scaledBitmap))
+        {
+            canvas.Clear(SKColors.White);
+            var destRect = new SKRect(0, 0, newWidth, newHeight);
+            canvas.DrawBitmap(bitmap, destRect);
+        }
+        
+        return scaledBitmap;
     }
 
     /// <summary>
@@ -67,15 +104,15 @@ class Program
             IsAntialias = true,
             Color = SKColors.Black
         };
-        
+
         // 分割文字為多行
         string[] lines = text.Split('\n');
-        
+
         // 計算每行文字的寬度和總高度
         float maxWidth = 0;
         float totalHeight = 0;
         var lineHeights = new float[lines.Length];
-        
+
         for (int i = 0; i < lines.Length; i++)
         {
             var bounds = new SKRect();
@@ -84,37 +121,37 @@ class Program
             lineHeights[i] = bounds.Height;
             totalHeight += bounds.Height;
         }
-        
+
         // 行間距 (20% 的字體大小)
         float lineSpacing = fontSize * 0.2f;
         totalHeight += lineSpacing * (lines.Length - 1);
-        
+
         // 增加邊距 (每邊增加原尺寸的50%，長寬總共增加兩倍)
         float margin = fontSize * 2;  // 使用字體大小的2倍作為邊距
         float totalWidth = maxWidth + margin * 2;
         totalHeight += margin * 2;
-        
+
         // 創建位圖並繪製文字
         using var bitmap = new SKBitmap((int)Math.Ceiling(totalWidth), (int)Math.Ceiling(totalHeight));
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.White);
-        
+
         // 繪製每行文字，起始位置增加邊距
         float y = margin;
         for (int i = 0; i < lines.Length; i++)
         {
             var bounds = new SKRect();
             paint.MeasureText(lines[i], ref bounds);
-            
+
             // 調整 y 座標使文字垂直置中於其邊界
             y -= bounds.Top;
-            
+
             canvas.DrawText(lines[i], margin, y, paint);
-            
+
             // 設定下一行的 y 座標
             y += bounds.Height + lineSpacing;
         }
-        
+
         canvas.Flush();
 
         using var image = SKImage.FromBitmap(bitmap);
@@ -163,11 +200,25 @@ class Program
     {
         Console.WriteLine($"開始將圖片轉換為ZPL二進制碼，圖片尺寸: {bitmap.Width}x{bitmap.Height}");
         
-        // 轉換為黑白圖像
-        using var blackWhiteBitmap = new SKBitmap(bitmap.Width, bitmap.Height, SKColorType.Gray8, SKAlphaType.Opaque);
+        // 使用簡單的二值化處理來轉換為黑白圖像
+        using var blackWhiteBitmap = new SKBitmap(bitmap.Width, bitmap.Height);
         using (var canvas = new SKCanvas(blackWhiteBitmap))
         {
-            canvas.DrawBitmap(bitmap, 0, 0);
+            // 先填充白色背景
+            canvas.Clear(SKColors.White);
+            
+            // 繪製原始圖像
+            using var paint = new SKPaint
+            {
+                ColorFilter = SKColorFilter.CreateColorMatrix(new float[]
+                {
+                    0.299f, 0.587f, 0.114f, 0, 0,
+                    0.299f, 0.587f, 0.114f, 0, 0,
+                    0.299f, 0.587f, 0.114f, 0, 0,
+                    0, 0, 0, 1, 0
+                })
+            };
+            canvas.DrawBitmap(bitmap, 0, 0, paint);
         }
         
         // 檢查圖片大小，過大的圖片可能無法正常處理
@@ -181,6 +232,16 @@ class Program
         int blackPixelCount = 0;
         int totalPixels = bitmap.Width * bitmap.Height;
         
+        // 保存中間結果，調試用
+        string debugImagePath = Path.Combine(Directory.GetCurrentDirectory(), "debug_bw_image.png");
+        using (var image = SKImage.FromBitmap(blackWhiteBitmap))
+        using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
+        using (var stream = File.OpenWrite(debugImagePath))
+        {
+            data.SaveTo(stream);
+        }
+        Console.WriteLine($"已保存二值化後圖片至: {debugImagePath}");
+        
         for (int y = 0; y < bitmap.Height; y++)
         {
             byte[] rowBytes = new byte[bytesPerRow];
@@ -188,17 +249,20 @@ class Program
             for (int x = 0; x < bitmap.Width; x++)
             {
                 SKColor pixel = blackWhiteBitmap.GetPixel(x, y);
-                byte grayValue = (byte)((pixel.Red * 0.3) + (pixel.Green * 0.59) + (pixel.Blue * 0.11));
+                // 使用更簡單的方法判斷黑白 - 平均灰度值
+                byte grayValue = (byte)((pixel.Red + pixel.Green + pixel.Blue) / 3);
                 
-                if (grayValue < 128)
+                // 反轉黑白判定 - ZPL中1代表黑點，這與常規理解一致
+                if (grayValue < 128)  // 小於閾值視為黑色
                 {
                     int byteIndex = x / 8;
-                    int bitIndex = 7 - (x % 8);
+                    int bitIndex = 7 - (x % 8);  // 從左到右的位順序
                     rowBytes[byteIndex] |= (byte)(1 << bitIndex);
                     blackPixelCount++;
                 }
             }
             
+            // 為每行輸出十六進制數據
             foreach (byte b in rowBytes)
             {
                 hexString.Append(b.ToString("X2"));
@@ -214,8 +278,10 @@ class Program
             Console.WriteLine($"⚠ 警告: 黑色像素比例過低，打印結果可能不明顯");
         }
         
+        // 輸出一些十六進制數據用於調試
         string result = hexString.ToString();
         Console.WriteLine($"ZPL二進制碼生成完成，長度: {result.Length} 字符");
+        Console.WriteLine($"前50個字符: {(result.Length > 50 ? result.Substring(0, 50) : result)}...");
         
         return result;
     }
@@ -232,12 +298,13 @@ class Program
         
         // 調整為更接近邊緣的位置，確保圖片可見
         string zplCommand = "^XA" +
-               $"^FO50,50" +  // 將位置調整為左上角更靠近邊緣的位置
+               $"^FO10,10" +  // 將位置調整為左上角更靠近邊緣的位置
                $"^GFA,{byteCount},{byteCount},{bytesPerRow},{hexData}" +
                "^FS" +
                "^XZ";
                
         Console.WriteLine($"ZPL指令總長度: {zplCommand.Length} 字符");
+        Console.WriteLine(zplCommand);
         return zplCommand;
     }
 
