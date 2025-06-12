@@ -23,18 +23,16 @@ class Program
             // ConvertTextToImage(text, outputPath, 48);
             // Console.WriteLine("✅ 中文圖片儲存完成：" + outputPath);
 
-
-
-            outputPath = "/Users/maenqi/Projects/TEXT_TO_IMAGE/TEXT_TO_IMAGE/bin/Debug/net6.0/label_text_mac.png";
+            outputPath = "/Users/maenqi/Downloads/label_capture_bw.png";
 
             // 2. 讀取圖片並準備打印
             using var scaledBitmap = LoadAndScaleImage(outputPath, 2.0);
             
-            using var btm = ResizeProportionally(scaledBitmap, 1200, 800);
+            using var btm = ResizeProportionally(scaledBitmap, 6*120, 3*120);
 
             // 裁剪圖片到固定大小 (例如 600x400 像素)，居中裁剪
-            int targetWidth = 1200;
-            int targetHeight = 800;
+            int targetWidth = 6*120;
+            int targetHeight = 3*120;
             using var bitmap = CropImageToSize(btm, targetWidth, targetHeight, true);
             
             // 3. 轉換為二進位碼
@@ -353,6 +351,18 @@ class Program
             int centerY = (targetHeight - bitmap.Height) / 2;
             
             canvas.DrawBitmap(bitmap, centerX, centerY);
+
+            // 儲存結果
+            string resultPath = Path.Combine(Directory.GetCurrentDirectory(), "result_image.png");
+            using (var image = SKImage.FromBitmap(resultBitmap))
+            using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
+            using (var stream = File.OpenWrite(resultPath))
+            {
+                data.SaveTo(stream);
+            }
+            Console.WriteLine($"結果圖片已儲存至: {resultPath}");
+            Console.WriteLine($"裁剪完成: 最終大小 {resultBitmap.Width}x{resultBitmap.Height}");
+
             return resultBitmap;
         }
         
@@ -383,6 +393,16 @@ class Program
                 new SKRect(0, 0, realWidth, realHeight)
             );
         }
+
+        // 儲存裁剪的結果
+        string croppedPath = Path.Combine(Directory.GetCurrentDirectory(), "cropped_image.png");
+        using (var image = SKImage.FromBitmap(croppedBitmap))
+        using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
+        using (var stream = File.OpenWrite(croppedPath))
+        {
+            data.SaveTo(stream);
+        }
+        Console.WriteLine($"裁剪後圖片已儲存至: {croppedPath}");
         
         Console.WriteLine($"裁剪完成: 最終大小 {croppedBitmap.Width}x{croppedBitmap.Height}");
         return croppedBitmap;
